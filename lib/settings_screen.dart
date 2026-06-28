@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String initialUrl;
   final bool initialKeyboardEnabled;
-  final SharedPreferences prefs;
 
   const SettingsScreen({
     super.key,
     required this.initialUrl,
     required this.initialKeyboardEnabled,
-    required this.prefs,
   });
 
   @override
@@ -63,7 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
-  Future<void> _saveSettings() async {
+  void _saveSettings() {
     final url = _urlController.text.trim();
 
     if (!_isValidUrl(url)) {
@@ -77,9 +74,6 @@ class _SettingsScreenState extends State<SettingsScreen>
       _isSaving = true;
       _urlError = null;
     });
-
-    await widget.prefs.setString('app_url', url);
-    await widget.prefs.setBool('keyboard_enabled', _keyboardEnabled);
 
     if (mounted) {
       Navigator.pop(context, {

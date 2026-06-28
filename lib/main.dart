@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'app_config.dart';
 import 'home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
-  runApp(MyApp(prefs: prefs));
+  final config = await AppConfig.load();
+  runApp(MyApp(config: config));
 }
 
 class MyApp extends StatelessWidget {
-  final SharedPreferences prefs;
+  final AppConfig config;
 
-  const MyApp({super.key, required this.prefs});
+  const MyApp({super.key, required this.config});
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +26,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         fontFamily: 'Segoe UI',
       ),
-      home: HomeScreen(prefs: prefs),
+      home: HomeScreen(config: config),
     );
   }
 }
