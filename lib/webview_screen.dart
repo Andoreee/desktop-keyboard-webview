@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_windows/webview_windows.dart';
+import 'virtual_keyboard.dart';
 
 class WebViewScreen extends StatefulWidget {
   final String url;
@@ -22,6 +22,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
   bool _isInitialized = false;
   bool _hasError = false;
   String _errorMessage = '';
+  bool _showKeyboard = false;
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
     }
     if (oldWidget.keyboardEnabled != widget.keyboardEnabled && _isInitialized) {
       _applyKeyboardSetting();
+      if (!widget.keyboardEnabled) setState(() => _showKeyboard = false);
     }
   }
 
@@ -60,10 +62,11 @@ class _WebViewScreenState extends State<WebViewScreen> {
   }
 
   void _onWebMessage(dynamic message) {
+    if (!widget.keyboardEnabled) return;
     if (message == 'kb_show') {
-      Process.run('cmd', ['/c', 'start', '', r'C:\Program Files\Common Files\microsoft shared\ink\TabTip.exe']);
+      setState(() => _showKeyboard = true);
     } else if (message == 'kb_hide') {
-      Process.run('taskkill', ['/f', '/im', 'TabTip.exe']);
+      setState(() => _showKeyboard = false);
     }
   }
 
@@ -73,7 +76,6 @@ class _WebViewScreenState extends State<WebViewScreen> {
   }
 
   void _applyScrollFix() {
-    // Enable touch/pointer scroll
     _controller.executeScript('''
       document.documentElement.style.touchAction = 'pan-x pan-y';
       document.body.style.touchAction = 'pan-x pan-y';
@@ -82,7 +84,6 @@ class _WebViewScreenState extends State<WebViewScreen> {
   }
 
   void _applyKeyboardSetting() {
-    // Reset guard dulu agar listener lama tidak blocking
     _controller.executeScript('window.__kbGuard = false;');
 
     if (!widget.keyboardEnabled) {
@@ -102,29 +103,84 @@ class _WebViewScreenState extends State<WebViewScreen> {
         })();
       ''');
     } else {
+      // ponytail: blur() prevents native OSK from popping up; we handle input ourselves
       _controller.executeScript('''
         (function() {
           if (window.__kbGuard) return;
           window.__kbGuard = true;
           document.addEventListener('focus', e => {
-            if (e.target.matches('input,textarea,[contenteditable]'))
+            if (e.target.matches('input,textarea,[contenteditable]')) {
+              e.target.blur();
+              window.__activeInput = e.target;
               window.chrome.webview.postMessage('kb_show');
+            }
           }, true);
-          document.addEventListener('blur', e => {
-            if (e.target.matches('input,textarea,[contenteditable]'))
-              window.chrome.webview.postMessage('kb_hide');
+          document.addEventListener('click', e => {
+            if (e.target.matches('input,textarea,[contenteditable]')) {
+              window.__activeInput = e.target;
+              window.chrome.webview.postMessage('kb_show');
+            }
           }, true);
         })();
       ''');
     }
   }
 
-  // Scroll 2 jari via pointer signal
+  void _onVirtualKey(String key) {
+    String js;
+    if (key == 'BACKSPACE') {
+      js = '''
+        (function() {
+          var el = window.__activeInput;
+          if (!el) return;
+          var v = el.value;
+          if (v && v.length > 0) {
+            el.value = v.slice(0, -1);
+            el.dispatchEvent(new Event('input', {bubbles:true}));
+          } else if (el.isContentEditable) {
+            document.execCommand('delete');
+          }
+        })();
+      ''';
+    } else if (key == 'ENTER') {
+      js = '''
+        (function() {
+          var el = window.__activeInput;
+          if (!el) return;
+          if (el.tagName === 'INPUT') {
+            el.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',code:'Enter',bubbles:true}));
+            el.form && el.form.requestSubmit && el.form.requestSubmit();
+          } else {
+            el.value = (el.value||'') + '\\n';
+            el.dispatchEvent(new Event('input', {bubbles:true}));
+          }
+        })();
+      ''';
+    } else {
+      final escaped = key.replaceAll("'", r"\'").replaceAll('\\', '\\\\');
+      js = '''
+        (function() {
+          var el = window.__activeInput;
+          if (!el) return;
+          if (el.isContentEditable) {
+            document.execCommand('insertText', false, '$escaped');
+          } else {
+            var start = el.selectionStart ?? el.value.length;
+            el.value = el.value.slice(0, start) + '$escaped' + el.value.slice(el.selectionEnd ?? start);
+            el.selectionStart = el.selectionEnd = start + 1;
+            el.dispatchEvent(new Event('input', {bubbles:true}));
+          }
+        })();
+      ''';
+    }
+    _controller.executeScript(js);
+  }
+
   void _handlePointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent) {
-      _controller.executeScript('''
-        window.scrollBy(${event.scrollDelta.dx}, ${event.scrollDelta.dy});
-      ''');
+      _controller.executeScript(
+        'window.scrollBy(${event.scrollDelta.dx}, ${event.scrollDelta.dy});',
+      );
     }
   }
 
@@ -139,13 +195,24 @@ class _WebViewScreenState extends State<WebViewScreen> {
     if (_hasError) return _buildErrorView();
     if (!_isInitialized) return _buildLoadingView();
 
-    return Listener(
-      onPointerSignal: _handlePointerSignal,
-      child: Webview(
-        _controller,
-        permissionRequested: (url, permissionKind, isUserInitiated) =>
-            WebviewPermissionDecision.allow,
-      ),
+    return Column(
+      children: [
+        Expanded(
+          child: Listener(
+            onPointerSignal: _handlePointerSignal,
+            child: Webview(
+              _controller,
+              permissionRequested: (url, permissionKind, isUserInitiated) =>
+                  WebviewPermissionDecision.allow,
+            ),
+          ),
+        ),
+        if (_showKeyboard)
+          VirtualKeyboard(
+            onKey: _onVirtualKey,
+            onDismiss: () => setState(() => _showKeyboard = false),
+          ),
+      ],
     );
   }
 
