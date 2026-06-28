@@ -1,16 +1,39 @@
-# desktop_keyboard_webview
+# Desktop Keyboard WebView
 
-A new Flutter project.
+Aplikasi kiosk Windows yang menampilkan WebView fullscreen dengan virtual keyboard dan konfigurasi URL.
 
-## Getting Started
+## Instalasi
 
-This project is a starting point for a Flutter application.
+1. Download artifact `windows-build.zip` dari GitHub Actions
+2. Extract ke folder permanen, misal `C:\Apps\desktop-keyboard-webview\`
+3. Jalankan `desktop_keyboard_webview.exe`
 
-A few resources to get you started if this is your first Flutter project:
+## Auto Start saat Boot
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+1. Tekan `Win+R` → ketik `shell:startup` → Enter
+2. Buat shortcut `desktop_keyboard_webview.exe` ke folder yang terbuka
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Konfigurasi
+
+Edit file `config.json` di folder yang sama dengan `.exe` menggunakan Notepad:
+
+```json
+{
+  "url": "https://example.com",
+  "keyboard_enabled": true
+}
+```
+
+File ini otomatis dibuat saat pertama kali menyimpan pengaturan dari dalam app.
+
+## Shortcut Tersembunyi
+
+| Shortcut | Fungsi |
+|---|---|
+| `Ctrl+Shift+S` | Buka halaman pengaturan |
+| `Ctrl+Shift+Q` | Keluar dari aplikasi |
+
+## Persyaratan
+
+- Windows 10/11
+- [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)

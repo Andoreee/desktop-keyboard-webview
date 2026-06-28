@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_windows/webview_windows.dart';
@@ -45,14 +46,24 @@ class _WebViewScreenState extends State<WebViewScreen> {
       await _controller.setBackgroundColor(Colors.transparent);
       await _controller.setPopupWindowPolicy(WebviewPopupWindowPolicy.deny);
 
-      // Inject JS setiap kali page selesai load
-      _controller.url.listen((_) => _onPageLoaded());
+      _controller.loadingState.listen((state) {
+        if (state == LoadingState.navigationCompleted) _onPageLoaded();
+      });
+      _controller.webMessage.listen(_onWebMessage);
 
       await _controller.loadUrl(widget.url);
 
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
       if (mounted) setState(() { _hasError = true; _errorMessage = e.toString(); });
+    }
+  }
+
+  void _onWebMessage(dynamic message) {
+    if (message == 'kb_show') {
+      Process.run('cmd', ['/c', 'start', '', r'C:\Program Files\Common Files\microsoft shared\ink\TabTip.exe']);
+    } else if (message == 'kb_hide') {
+      Process.run('taskkill', ['/f', '/im', 'TabTip.exe']);
     }
   }
 
@@ -71,17 +82,19 @@ class _WebViewScreenState extends State<WebViewScreen> {
   }
 
   void _applyKeyboardSetting() {
+    // Reset guard dulu agar listener lama tidak blocking
+    _controller.executeScript('window.__kbGuard = false;');
+
     if (!widget.keyboardEnabled) {
       _controller.executeScript('''
         (function() {
           if (window.__kbGuard) return;
           window.__kbGuard = true;
-          const block = e => {
+          document.addEventListener('focus', e => {
             if (e.target.matches('input,textarea,[contenteditable]')) {
               e.target.blur(); e.preventDefault();
             }
-          };
-          document.addEventListener('focus', block, true);
+          }, true);
           document.addEventListener('click', e => {
             if (e.target.matches('input,textarea,[contenteditable]'))
               setTimeout(() => e.target.blur(), 10);
@@ -89,20 +102,17 @@ class _WebViewScreenState extends State<WebViewScreen> {
         })();
       ''');
     } else {
-      // Buka TabTip saat input difokus, tutup saat blur
-      _controller.executeScript(r'''
+      _controller.executeScript('''
         (function() {
           if (window.__kbGuard) return;
           window.__kbGuard = true;
           document.addEventListener('focus', e => {
-            if (e.target.matches('input,textarea,[contenteditable]')) {
-              window.__flutter_keyboard_show && window.__flutter_keyboard_show();
-            }
+            if (e.target.matches('input,textarea,[contenteditable]'))
+              window.chrome.webview.postMessage('kb_show');
           }, true);
           document.addEventListener('blur', e => {
-            if (e.target.matches('input,textarea,[contenteditable]')) {
-              window.__flutter_keyboard_hide && window.__flutter_keyboard_hide();
-            }
+            if (e.target.matches('input,textarea,[contenteditable]'))
+              window.chrome.webview.postMessage('kb_hide');
           }, true);
         })();
       ''');
